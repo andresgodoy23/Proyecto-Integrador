@@ -1,0 +1,62 @@
+using UnityEngine;
+
+public class SemaforoController : MonoBehaviour
+{
+    public string nombre;
+
+    private Renderer luzRoja;
+    private Renderer luzAmarilla;
+    private Renderer luzVerde;
+
+    private Material matRojoActivo;
+    private Material matVerdeActivo;
+    private Material matApagado;
+
+    void Awake()
+    {
+        matRojoActivo  = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        matVerdeActivo = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        matApagado     = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+
+        matRojoActivo.color  = Color.red;
+        matVerdeActivo.color = Color.green;
+        matApagado.color     = new Color(0.2f, 0.2f, 0.2f);
+
+        matRojoActivo.EnableKeyword("_EMISSION");
+        matVerdeActivo.EnableKeyword("_EMISSION");
+        matRojoActivo.SetColor("_EmissionColor",  Color.red   * 2f);
+        matVerdeActivo.SetColor("_EmissionColor", Color.green * 2f);
+
+        BuscarLuces();
+    }
+
+    void BuscarLuces()
+    {
+        foreach (Renderer r in GetComponentsInChildren<Renderer>())
+        {
+            string n = r.gameObject.name.ToLower();
+            if      (n.Contains("roj") || n.Contains("red"))   luzRoja     = r;
+            else if (n.Contains("amar") || n.Contains("yell")) luzAmarilla = r;
+            else if (n.Contains("verd") || n.Contains("gree")) luzVerde    = r;
+        }
+    }
+    public void ActualizarEstado(string fase, string decision)
+    {
+        if (luzRoja == null || luzVerde == null) return;
+
+        bool estaEnRojo = (fase == "A");
+
+        if (estaEnRojo)
+        {
+            if (luzRoja  != null) luzRoja.material  = matRojoActivo;
+            if (luzVerde != null) luzVerde.material = matApagado;
+        }
+        else
+        {
+            if (luzRoja  != null) luzRoja.material  = matApagado;
+            if (luzVerde != null) luzVerde.material = matVerdeActivo;
+        }
+
+        if (luzAmarilla != null) luzAmarilla.material = matApagado;
+    }
+}

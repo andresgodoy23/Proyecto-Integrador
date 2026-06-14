@@ -1,0 +1,195 @@
+using System.Collections.Generic;
+using UnityEngine;
+using System.IO;
+
+public class SimulacionController : MonoBehaviour
+{
+    [Header("Prefabs")]
+    public GameObject prefabCarroAmarillo;
+    public GameObject prefabCarroNaranja;
+    public GameObject prefabCarroRojo;
+    public GameObject prefabCarroMorado;
+    public GameObject prefabCarroAzul;
+    public GameObject prefabCarroVerde;
+    public GameObject prefabSemaforo;
+
+    [Header("Configuración")]
+    public float tickDuration    = 0.05f;
+    public float alturaAuto      = 0.5f;
+    public float alturaSemaforo  = 0.0f;
+
+    [Header("Referencia del mapa")]
+    public float C1_unity_x     = -1589.9f;
+    public float C1_unity_z     = -651.4f;
+    public float C1_python_x    = 30.0f;
+    public float C1_python_y    = 50.0f;
+    public float factorEscala   = 2.0419f;
+    public float rotacionGrados = 53.53f;
+
+    private SimulacionData data;
+    private int            tickActual = 0;
+    private float          timerTick  = 0f;
+    private bool           corriendo  = false;
+
+    private Dictionary<int, GameObject>            autosActivos  = new Dictionary<int, GameObject>();
+    private List<SemaforoController>               semaforos     = new List<SemaforoController>();
+    private Dictionary<string, List<HistorialSem>> histSemaforos = new Dictionary<string, List<HistorialSem>>();
+
+    void Start()
+    {
+        CargarJSON();
+        corriendo = true;
+    }
+
+    void Update()
+    {
+        if (!corriendo || data == null) return;
+
+        timerTick += Time.deltaTime;
+        if (timerTick >= tickDuration)
+        {
+            timerTick = 0f;
+            if (tickActual < data.historial_autos.Count)
+            {
+                ProcesarTick(tickActual);
+                tickActual++;
+            }
+            else
+            {
+                corriendo = false;
+                Debug.Log("Simulación completada.");
+            }
+        }
+    }
+
+    void CargarJSON()
+    {
+        string path = Application.streamingAssetsPath + "/simulacion_distritotec.json";
+
+        if (!File.Exists(path))
+        {
+            Debug.LogError($"JSON no encontrado en: {path}");
+            return;
+        }
+
+        string json = File.ReadAllText(path);
+        data = JsonUtility.FromJson<SimulacionData>(json);
+
+        if (data == null)
+        {
+            Debug.LogError("Error al deserializar el JSON.");
+            return;
+        }
+
+        foreach (var h in data.historial_semaforos)
+        {
+            if (!histSemaforos.ContainsKey(h.semaforo))
+                histSemaforos[h.semaforo] = new List<HistorialSem>();
+            histSemaforos[h.semaforo].Add(h);
+        }
+
+        Debug.Log($"JSON cargado: {data.metadata.total_creados} autos, " +
+                  $"{data.historial_autos.Count} ticks, " +
+                  $"fluidez {data.metadata.fluidez_pct}%");
+    }
+
+    void InstanciarSemaforos()
+    {
+        if (data == null) return;
+
+        foreach (var config in data.semaforos_config)
+        {
+            Vector3 pos = PythonToUnity(config.pos[0], config.pos[1]);
+            pos.y = alturaSemaforo;
+
+            GameObject go = Instantiate(prefabSemaforo, pos, Quaternion.identity);
+            go.name = config.nombre;
+
+            SemaforoController sc = go.AddComponent<SemaforoController>();
+            sc.nombre = config.nombre;
+            semaforos.Add(sc);
+        }
+    }
+
+    void ProcesarTick(int tick)
+    {
+        foreach (var sc in semaforos)
+        {
+            if (histSemaforos.ContainsKey(sc.nombre) &&
+                tick < histSemaforos[sc.nombre].Count)
+            {
+                var h = histSemaforos[sc.nombre][tick];
+                sc.ActualizarEstado(h.fase, h.decision);
+            }
+        }
+
+        var frame      = data.historial_autos[tick].autos;
+        var idsEnFrame = new HashSet<int>();
+
+        if (frame == null) return;
+
+        foreach (var autoData in frame)
+        {
+            idsEnFrame.Add(autoData.id);
+            Vector3 pos = PythonToUnity(autoData.x, autoData.y);
+            pos.y = alturaAuto;
+
+            if (autosActivos.ContainsKey(autoData.id))
+            {
+                CarController cc = autosActivos[autoData.id]
+                                   .GetComponent<CarController>();
+                if (cc != null) cc.ActualizarPosicion(pos);
+                else autosActivos[autoData.id].transform.position = pos;
+            }
+            else
+            {
+                GameObject prefab = ObtenerPrefab(autoData.route);
+                if (prefab != null)
+                {
+                    GameObject go = Instantiate(prefab, pos, Quaternion.identity);
+                    go.name = $"Auto_{autoData.id}_{autoData.route}";
+                    CarController cc = go.AddComponent<CarController>();
+                    cc.Inicializar(pos);
+                    autosActivos[autoData.id] = go;
+                }
+            }
+        }
+
+        var idsEliminar = new List<int>();
+        foreach (var kvp in autosActivos)
+        {
+            if (!idsEnFrame.Contains(kvp.Key))
+            {
+                Destroy(kvp.Value);
+                idsEliminar.Add(kvp.Key);
+            }
+        }
+        foreach (var id in idsEliminar)
+            autosActivos.Remove(id);
+    }
+
+    GameObject ObtenerPrefab(string ruta)
+    {
+        switch (ruta)
+        {
+            case "flujo_principal":        return prefabCarroAmarillo;
+            case "flujo_incorporacion":    return prefabCarroRojo;
+            case "flujo_avenida_vertical": return prefabCarroNaranja;
+            case "flujo_azul_entrante":    return prefabCarroAzul;
+            case "flujo_sur_norte":        return prefabCarroMorado;
+            case "flujo_norte_sur":        return prefabCarroVerde;
+            default:                       return prefabCarroAmarillo;
+        }
+    }
+
+    // Convierte coordenadas Python (x,y) a posición Unity (x,y,z)
+    public Vector3 PythonToUnity(float px, float py)
+    {
+        float dx  = (px - C1_python_x) * factorEscala;
+        float dy  = (py - C1_python_y) * factorEscala;
+        float rad = rotacionGrados * Mathf.Deg2Rad;
+        float ux  = dx * Mathf.Cos(rad) - dy * Mathf.Sin(rad) + C1_unity_x;
+        float uz  = dx * Mathf.Sin(rad) + dy * Mathf.Cos(rad) + C1_unity_z;
+        return new Vector3(ux, 0f, uz);
+    }
+}

@@ -1,0 +1,44 @@
+using UnityEngine;
+
+public class CarController : MonoBehaviour
+{
+    private Vector3 posicionAnterior;
+    private bool    inicializado      = false;
+    private bool    haRotadoPrimeraVez = false;
+
+    public void Inicializar(Vector3 posInicial)
+    {
+        posicionAnterior   = posInicial;
+        inicializado       = true;
+        haRotadoPrimeraVez = false;
+    }
+
+    public void ActualizarPosicion(Vector3 nuevaPos)
+    {
+        if (!inicializado) return;
+
+        Vector3 direccion = nuevaPos - posicionAnterior;
+
+        if (direccion.magnitude > 0.01f)
+        {
+            Quaternion rotObjetivo = Quaternion.LookRotation(direccion);
+
+            if (!haRotadoPrimeraVez)
+            {
+                transform.rotation    = rotObjetivo;
+                haRotadoPrimeraVez    = true;
+            }
+            else
+            {
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    rotObjetivo,
+                    Time.deltaTime * 10f
+                );
+            }
+        }
+
+        transform.position = nuevaPos;
+        posicionAnterior   = nuevaPos;
+    }
+}

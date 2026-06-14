@@ -1,0 +1,86 @@
+using System;
+using System.Collections.Generic;
+
+[Serializable]
+public class SimulacionData
+{
+    public Metadata              metadata;
+    public Cruces                cruces;
+    public Waypoints             waypoints;
+    public List<SemaforoConfig>  semaforos_config;
+    public List<HistorialSem>    historial_semaforos;
+    public List<FrameAutos>      historial_autos;
+}
+
+[Serializable]
+public class FrameAutos
+{
+    public List<AutoFrame> autos;
+}
+
+[Serializable]
+public class Metadata
+{
+    public int   size;
+    public int   space_size;
+    public float carril;
+    public float r_rotonda;
+    public int   steps;
+    public int   total_creados;
+    public int   total_cruzaron;
+    public float fluidez_pct;
+}
+
+[Serializable]
+public class Cruces
+{
+    public List<float> C1_rotonda;
+    public List<float> C2_junco;
+    public List<float> C3_ahuehuetes;
+    public List<float> PFA;
+}
+
+[Serializable]
+public class Waypoints
+{
+    public List<List<float>> flujo_principal;
+    public List<List<float>> flujo_incorporacion;
+    public List<List<float>> flujo_avenida_vertical;
+    public List<List<float>> flujo_azul_entrante;
+    public List<List<float>> flujo_sur_norte;
+    public List<List<float>> flujo_norte_sur; 
+}
+
+[Serializable]
+public class SemaforoConfig
+{
+    public string       nombre;
+    public List<float>  pos;
+    public List<string> fase_a_rutas;
+    public List<string> fase_b_rutas;
+    public int          green_base;
+    public int          green_min;
+    public int          green_ext;
+}
+
+[Serializable]
+public class HistorialSem
+{
+    public int    tick;
+    public string semaforo;
+    public string fase;
+    public string decision;
+    public int    cola_a;
+    public int    cola_b;
+    public int    timer;
+}
+
+[Serializable]
+public class AutoFrame
+{
+    public int    id;
+    public string route;
+    public float  x;
+    public float  y;
+    public bool   esperando;
+}
